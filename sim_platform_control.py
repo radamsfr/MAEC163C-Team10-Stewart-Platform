@@ -34,8 +34,8 @@ P_LOCAL = np.array([R_PLATE * np.cos(BASE_ANGLES), R_PLATE * np.sin(BASE_ANGLES)
 
 
 # Hardware Calibration Limits (Max/Horizontal vs Min/Vertical)
-Q_MAX_HORIZONTAL = np.array([188.0, 162.0, 172.0]) 
-Q_MIN_VERTICAL   = np.array([98.0, 72.0, 82.0])    
+Q_MAX_HORIZONTAL = np.array([188.0, 162.0, 172.0])
+Q_MIN_VERTICAL   = np.array([98.0, 72.0, 82.0])
 
 # ─── CONVERSION HELPER FUNCTIONS ───────────────────────────────────────────────────
 def deg_to_pos_ticks(deg):
@@ -182,7 +182,7 @@ def live_hardware_sim_loop(portHandler, packetHandler):
     Launches the combined Matplotlib UI, processes real-time inverse kinematics,
     and streams goal updates directly to the motors.
     """
-    # Initialize the SyncWrite interface for ultra-low latency updates
+    # Initialize the SyncWrite interface for low latency updates
     groupSyncWrite = GroupSyncWrite(portHandler, packetHandler, ADDR_GOAL_POSITION, LEN_GOAL_POSITION)
 
     # Build Matplotlib interface framework
@@ -254,8 +254,12 @@ def live_hardware_sim_loop(portHandler, packetHandler):
                 # Draw physical linkages visually
                 A_local_x = L_ARM * np.cos(theta_math)
                 A_global = B[:, i] + np.array([A_local_x * np.cos(BASE_ANGLES[i]), A_local_x * np.sin(BASE_ANGLES[i]), L_ARM * np.sin(theta_math)])
-                ax.plot([B[0, i], A_global[0]], [B[1, i], A_global[1]], [B[2, i], A_global[2]], 'r-o', lw=3)
-                ax.plot([A_global[0], P_global[0, i]], [A_global[1], P_global[1, i]], [A_global[2], P_global[2, i]], color='g' if is_pose_valid else 'm', lw=2)
+                ax.plot([B[0, i], A_global[0]], 
+                        [B[1, i], A_global[1]], 
+                        [B[2, i], A_global[2]], 'r-o', lw=3)
+                ax.plot([A_global[0], P_global[0, i]], 
+                        [A_global[1], P_global[1, i]], 
+                        [A_global[2], P_global[2, i]], color='g' if is_pose_valid else 'm', lw=2)
             else:
                 is_pose_valid = False
 
