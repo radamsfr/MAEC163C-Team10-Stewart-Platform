@@ -39,9 +39,9 @@ ax_roll  = plt.axes([0.15, 0.15, 0.65, 0.03])
 ax_pitch = plt.axes([0.15, 0.10, 0.65, 0.03])
 ax_z     = plt.axes([0.15, 0.05, 0.65, 0.03])
 
-s_roll  = Slider(ax_roll, 'Roll (deg)', -15.0, 15.0, valinit=0.0)
-s_pitch = Slider(ax_pitch, 'Pitch (deg)', -15.0, 15.0, valinit=0.0)
-s_z     = Slider(ax_z, 'Heave Z (mm)', 80.0, 150.0, valinit=115.0)
+s_roll  = Slider(ax_roll, 'Roll (deg)', -12.0, 12.0, valinit=0.0)
+s_pitch = Slider(ax_pitch, 'Pitch (deg)', -12.0, 12.0, valinit=0.0)
+s_z     = Slider(ax_z, 'Heave Z (mm)', 50.0, 95.0, valinit=70.0)
 
 # --- CORE INVERSE KINEMATICS AND RENDERING FUNCTION ---
 def update(val):
