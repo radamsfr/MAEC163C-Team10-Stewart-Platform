@@ -1,5 +1,6 @@
 import time
 import numpy as np
+import matplotlib.pyplot as plt
 from dynamixel_sdk import *
 from ball_velocity_tracker import track_ping_pong_ball
 
@@ -22,6 +23,10 @@ POSITION_CONTROL_MODE = 3
 ADDR_TORQUE_ENABLE = 64
 ADDR_GOAL_POSITION = 116
 LEN_GOAL_POSITION  = 4
+
+ball_time_history = []
+error_x_history   = []
+error_y_history   = []
 
 cap = None
 
@@ -255,6 +260,33 @@ def goto_home_via_position_mode(
         time.sleep(0.05)
     print("Homed and ready.")
 
+def plot_ball_error_performance():
+    """Generates a combined performance plot for X and Y tracking errors."""
+    if not ball_time_history:
+        print("No dynamic data collected during execution. Skipping plots.")
+        return
+
+    plt.figure(figsize=(10, 6))
+    
+    # Plot X and Y error data on the same axes
+    plt.plot(ball_time_history, error_x_history, color='teal', linestyle='-', linewidth=2, label='X Position Error')
+    plt.plot(ball_time_history, error_y_history, color='darkorange', linestyle='-', linewidth=2, label='Y Position Error')
+    
+    # Draw a stark black baseline indicating dead-center (0.0 error target)
+    plt.axhline(0.0, color='black', linestyle='--', linewidth=1.5, label='Target State (Dead Center)')
+    
+    # Labeling metrics
+    plt.title('Ball Centering Deviation Error over Time', fontsize=14, fontweight='bold')
+    plt.xlabel('Time Elapsed (Seconds)', fontsize=12)
+    
+    # Label adjusts depending on your normalization scale (pixels, normalized -1 to 1, or mm)
+    plt.ylabel('Deviation Error from Center Target', fontsize=12)
+    
+    plt.grid(True, linestyle=':', alpha=0.6)
+    plt.legend(loc='upper right', frameon=True, shadow=True)
+    
+    print("\nDisplaying ball positioning performance graph...")
+    plt.show()
 
 # ─── MAIN BALANCING EXECUTION LOOP ────────────────────────────────────────
 def main():
@@ -290,6 +322,9 @@ def main():
         q_initial = [188, 162, 172]
         goto_home_via_position_mode(q_initial, packetHandler=packetHandler, portHandler=portHandler)
         time.sleep(0.5)
+        
+        session_start_time = time.time()
+        
         while True:
             t_start = time.time()
             dt = t_start - prev_time
@@ -314,6 +349,10 @@ def main():
             INT_LIMIT = 3.0
             integral_error_x = np.clip(integral_error_x, -INT_LIMIT / K_I_ROLL, INT_LIMIT / K_I_ROLL)
             integral_error_y = np.clip(integral_error_y, -INT_LIMIT / K_I_PITCH, INT_LIMIT / K_I_PITCH)
+            
+            ball_time_history.append(t_start - session_start_time)
+            error_x_history.append(error_x)
+            error_y_history.append(error_y)
 
             # PID
             # Note: Tweak signs (+/-) depending on camera mounting orientation
@@ -363,6 +402,8 @@ def main():
             packetHandler.write1ByteTxRx(portHandler, dxl_id, ADDR_TORQUE_ENABLE, 0)
         portHandler.closePort()
         print("System shutdown clear.")
+        
+        plot_ball_error_performance()
 
 if __name__ == "__main__":
     main()
