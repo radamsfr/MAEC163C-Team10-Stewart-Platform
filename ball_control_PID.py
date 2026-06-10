@@ -43,16 +43,14 @@ Q_MIN_VERTICAL   = np.array([98.0, 72.0, 82.0])
 # --- NEUTRAL BALANCING PLANE ---
 NEUTRAL_Z = 80.0  # Safe compact mid-height for your short rods
 
-# ─── PD CONTROLLER TUNING PARAMETERS ──────────────────────────────────────
-# Note: Pitch controls Y-axis motion, Roll controls X-axis motion.
-# Start with small K_P values and K_D at zero, then tune up incrementally.
+# ─── PID CONTROLLER TUNING PARAMETERS ──────────────────────────────────────
 K_P_ROLL  = 10.0    # Proportional gain for X -> Roll tilt
 K_D_ROLL  = 6.0    # Derivative gain (damping) for X speed
-K_I_ROLL  = 1.5    # Integral gain for Roll (optional, can help with steady-state error)
+K_I_ROLL  = 1.5    # Integral gain for Roll
 
 K_P_PITCH = 10.0    # Proportional gain for Y -> Pitch tilt
 K_D_PITCH = 6.0    # Derivative gain (damping) for Y speed
-K_I_PITCH = 1.5    # Integral gain for Pitch (optional, can help with steady-state error)
+K_I_PITCH = 1.5    # Integral gain for Pitch
 
 
 MAX_TILT_DEG = 8.0  # Hard soft-stop cap to keep angles gentle and stable
@@ -94,16 +92,14 @@ def get_ball_position(camera_index=1):
     if not ret or frame is None:
         return 0.0, 0.0
 
-    # --- STEP 1: CONVERT TO GRAYSCALE & BLUR ---
+    # --- CONVERT TO GRAYSCALE & BLUR ---
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     blurred = cv2.GaussianBlur(gray, (9, 9), 0)
 
-    # --- STEP 2: CREATE A BLACK MASK FOR THE BACKGROUND ---
-    # We create a blank, pure black canvas matching our frame size
+    # --- CREATE A BLACK MASK FOR THE BACKGROUND ---
     bg_mask = np.zeros_like(gray)
     
-    # Use HoughCircles to find your large, black circular platform layout automatically.
-    # If the camera is fixed, you can also replace this with a static drawn circle!
+    # Use Hough Circles to find platform plate
     platform_circles = cv2.HoughCircles(
         blurred, cv2.HOUGH_GRADIENT, dp=1.2, minDist=100,
         param1=50, param2=30, minRadius=150, maxRadius=240
@@ -114,19 +110,17 @@ def get_ball_position(camera_index=1):
 
     if platform_circles is not None:
         platform_circles = np.uint16(np.around(platform_circles))
-        # Take the largest detected circle (your platform)
+        # Take the largest detected circle (the platform)
         plat_x, plat_y, plat_r = platform_circles[0][0]
 
     # Draw a pure white circle on our black canvas mask to serve as the "window"
     cv2.circle(bg_mask, (plat_x, plat_y), plat_r, 255, -1)
 
-    # --- STEP 3: MASK THE GRAYSCALE IMAGE ---
-    # Copy pixels ONLY where bg_mask is white. Everything else becomes pure black!
-    # This completely deletes your white room background.
+    # --- MASK THE GRAYSCALE IMAGE ---
+    # Copy pixels ONLY where bg_mask is white. Everything else becomes black (0).
     masked_gray = cv2.bitwise_and(gray, gray, mask=bg_mask)
 
-    # --- STEP 4: TRACK THE WHITE BALL INSIDE THE CLEAN ZONE ---
-    # Run our regular binary thresholding on the newly cleaned image
+    # --- TRACK THE WHITE BALL INSIDE THE CLEAN ZONE ---
     _, thresh = cv2.threshold(masked_gray, 180, 255, cv2.THRESH_BINARY)
     contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
@@ -153,7 +147,7 @@ def get_ball_position(camera_index=1):
                     detected_ball_pixel_x = float(M["m10"] / M["m00"])
                     detected_ball_pixel_y = float(M["m01"] / M["m00"])
 
-    # --- STEP 5: DRAW UI ELEMENTS ON THE ORIGINAL DISPLAY FRAME ---
+    # --- DRAW UI ELEMENTS ON THE ORIGINAL DISPLAY FRAME ---
     # Red crosshair for calibration alignment
     cv2.circle(frame, (CENTER_X, CENTER_Y), 4, (0, 0, 255), -1)
     # Draw a thin yellow line showing where the background mask boundary cuts off
@@ -172,7 +166,7 @@ def get_ball_position(camera_index=1):
         cv2.putText(frame, f"Ball: {norm_x:.2f}, {norm_y:.2f}", (20, 40), 
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
         
-        # DEBUG TIP: Change 'frame' to 'thresh' below to see the isolated binary view!
+        
         cv2.imshow("Stewart Platform Tracking Feed", frame)
         cv2.imshow("Thresholded Mask View", thresh)
         cv2.waitKey(1) 
@@ -215,6 +209,7 @@ def inverse_kinematics(roll_deg, pitch_deg, z_mm):
             return None, False
 
     return motor_angles_physical, True
+
 
 def goto_home_via_position_mode(
     q_home_deg,
@@ -301,9 +296,7 @@ def main():
             if dt <= 0.0:
                 dt = 0.001 # Prevent divide-by-zero errors
 
-            # 1. READ current ball position data
             ball_x, ball_y = get_ball_position()
-            
             ball_x = -ball_x  # Invert X if camera is mounted flipped
             # ball_y = -ball_y  # Invert Y if camera is mounted flipped
 
@@ -322,8 +315,8 @@ def main():
             integral_error_x = np.clip(integral_error_x, -INT_LIMIT / K_I_ROLL, INT_LIMIT / K_I_ROLL)
             integral_error_y = np.clip(integral_error_y, -INT_LIMIT / K_I_PITCH, INT_LIMIT / K_I_PITCH)
 
-            # 3. RUN THE PD ALGORITHM 
-            # Note: Tweak signs (+/-) depending on camera mounting orientation!
+            # PID
+            # Note: Tweak signs (+/-) depending on camera mounting orientation
             target_roll  = (K_P_ROLL * error_x) + (K_D_ROLL * d_error_x) + (K_I_ROLL * integral_error_x)
             target_pitch = (K_P_PITCH * error_y) + (K_D_PITCH * d_error_y) + (K_I_PITCH * integral_error_y)
 
@@ -333,7 +326,7 @@ def main():
             
             print(f"Target Roll: {target_roll:.2f}°, Target Pitch: {target_pitch:.2f}°")
 
-            # 4. PROCESS THROUGH KINEMATICS & SHIP POSITION DATA TO HARDWARE
+            # PROCESS THROUGH KINEMATICS & SHIP POSITION DATA TO HARDWARE
             motor_angles, valid = inverse_kinematics(target_roll, target_pitch, NEUTRAL_Z)
 
             if valid:
