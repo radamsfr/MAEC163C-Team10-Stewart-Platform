@@ -8,6 +8,7 @@ from ball_velocity_tracker import track_ping_pong_ball
 DXL_IDS          = [3, 2, 1]
 BAUDRATE         = 57600
 PROTOCOL_VERSION = 2.0
+# DEVICENAME       = "COM3" # Windows
 DEVICENAME       = "/dev/tty.usbserial-FT3FSNI8"
 
 ADDR_OPERATING_MODE   = 11
@@ -313,6 +314,11 @@ def main():
     integral_error_x = 0.0
     integral_error_y = 0.0
 
+    last_valid_x = 0.0
+    last_valid_y = 0.0
+    lost_frame_count = 0
+    MAX_LOST_FRAMES_HOLD = 5 # How many frames to trust old data before giving up
+            
     # Loop rate control settings (~100Hz loop speed)
     loop_hz = 100.0
     loop_period = 1.0 / loop_hz
@@ -337,6 +343,30 @@ def main():
             ball_x, ball_y = get_ball_position()
             ball_x = -ball_x  # Invert X if camera is mounted flipped
             # ball_y = -ball_y  # Invert Y if camera is mounted flipped
+            
+            if ball_x == 0.0 and ball_y == 0.0:
+                lost_frame_count += 1
+                
+                if lost_frame_count <= MAX_LOST_FRAMES_HOLD:
+                    # Condition A: Temporary blink/glare. Hold last known good position.
+                    ball_x = last_valid_x
+                    ball_y = last_valid_y
+                    
+                    # CRITICAL: Skip appending to the graph logs so it doesn't plot fake spikes!
+                    log_this_frame = False 
+                else:
+                    # Condition B: Ball is genuinely gone off the plate. Go to true center.
+                    ball_x = 0.0
+                    ball_y = 0.0
+                    log_this_frame = True # Log it now because it's a real system state reset
+            else:
+                # Ball is found cleanly!
+                lost_frame_count = 0
+                
+                # Save as our last verified coordinates
+                last_valid_x = ball_x
+                last_valid_y = ball_y
+                log_this_frame = True
 
             # Center target coordinates are (0,0), so error is directly current position
             error_x = ball_x 
@@ -353,9 +383,10 @@ def main():
             integral_error_x = np.clip(integral_error_x, -INT_LIMIT / K_I_ROLL, INT_LIMIT / K_I_ROLL)
             integral_error_y = np.clip(integral_error_y, -INT_LIMIT / K_I_PITCH, INT_LIMIT / K_I_PITCH)
             
-            ball_time_history.append(t_start - session_start_time)
-            error_x_history.append(error_x)
-            error_y_history.append(error_y)
+            if log_this_frame:
+                ball_time_history.append(t_start - session_start_time)
+                error_x_history.append(error_x)
+                error_y_history.append(error_y)
 
             # PID
             # Note: Tweak signs (+/-) depending on camera mounting orientation
