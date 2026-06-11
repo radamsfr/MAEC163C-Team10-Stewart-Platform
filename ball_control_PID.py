@@ -348,22 +348,17 @@ def main():
                 lost_frame_count += 1
                 
                 if lost_frame_count <= MAX_LOST_FRAMES_HOLD:
-                    # Condition A: Temporary blink/glare. Hold last known good position.
                     ball_x = last_valid_x
                     ball_y = last_valid_y
                     
-                    # CRITICAL: Skip appending to the graph logs so it doesn't plot fake spikes!
                     log_this_frame = False 
                 else:
-                    # Condition B: Ball is genuinely gone off the plate. Go to true center.
                     ball_x = 0.0
                     ball_y = 0.0
-                    log_this_frame = True # Log it now because it's a real system state reset
+                    log_this_frame = True
             else:
-                # Ball is found cleanly!
                 lost_frame_count = 0
                 
-                # Save as our last verified coordinates
                 last_valid_x = ball_x
                 last_valid_y = ball_y
                 log_this_frame = True
