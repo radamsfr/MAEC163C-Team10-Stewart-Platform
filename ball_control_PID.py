@@ -50,13 +50,13 @@ Q_MIN_VERTICAL   = np.array([98.0, 72.0, 82.0])
 NEUTRAL_Z = 80.0  # Safe compact mid-height for your short rods
 
 # ─── PID CONTROLLER TUNING PARAMETERS ──────────────────────────────────────
-K_P_ROLL  = 8.0    # Proportional gain for X -> Roll tilt
-K_D_ROLL  = 6.0    # Derivative gain (damping) for X speed
-K_I_ROLL  = 3   # Integral gain for Roll
+K_P_ROLL  = 10    # Proportional gain for X -> Roll tilt
+K_D_ROLL  = 5.0    # Derivative gain (damping) for X speed
+K_I_ROLL  = 3.5    # Integral gain for Roll
 
-K_P_PITCH = 8.0    # Proportional gain for Y -> Pitch tilt
-K_D_PITCH = 6.0    # Derivative gain (damping) for Y speed
-K_I_PITCH = 3    # Integral gain for Pitch
+K_P_PITCH = 10    # Proportional gain for Y -> Pitch tilt
+K_D_PITCH = 5.0    # Derivative gain (damping) for Y speed
+K_I_PITCH = 3.5    # Integral gain for Pitch
 
 
 MAX_TILT_DEG = 8.0  # Hard soft-stop cap to keep angles gentle and stable
@@ -270,25 +270,36 @@ def plot_ball_error_performance():
     PX_PER_NORM = 320                  # 1.0 normalized = 320 px (half frame width)
     MM_PER_PX   = 535.0 / 640.0       # physical calibration
     CM_PER_NORM = PX_PER_NORM * MM_PER_PX / 10.0   # = 26.75 cm per unit
+    error_x_cm = np.array(error_x_history, dtype=float) * CM_PER_NORM
+    error_y_cm = np.array(error_y_history, dtype=float) * CM_PER_NORM
+    distance_cm = np.sqrt(error_x_cm**2 + error_y_cm**2)
 
-    error_x_cm = [e * CM_PER_NORM for e in error_x_history]
-    error_y_cm = [e * CM_PER_NORM for e in error_y_history]
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10), sharex=True)
+    fig.suptitle('Ball Position Error with PID Control (P = 10, I = 3, D = 5)', fontsize=15, fontweight='bold')
 
-    plt.figure(figsize=(10, 6))
-    plt.plot(ball_time_history, error_x_cm, color='teal',       linestyle='-', linewidth=2, label='X Position Error')
-    plt.axhline(0.0, color='black', linestyle='--', linewidth=1.5, label='Target State (Dead Center)')
+    # ── Plot 1: Linear distance from center ───────────────────────────────
+    ax1.plot(ball_time_history, distance_cm, color='mediumpurple', linewidth=2, label='Distance from Center')
+    ax1.axhline(0.0, color='black',  linestyle='--', linewidth=1.5, label='Target (0 cm)')
+    ax1.axhline( 1.5, color='green', linestyle='--', linewidth=1.5, label='Convergence Bound (±1.5 cm)')
+    ax1.axhline(-1.5, color='green', linestyle='--', linewidth=1.5)
+    ax1.set_title('Linear Distance from Center', fontsize=13)
+    ax1.set_ylabel('Distance (cm)', fontsize=12)
+    ax1.legend(loc='upper right', frameon=True, shadow=True)
+    ax1.grid(True, linestyle=':', alpha=0.6)
 
-    plt.figure(figsize=(10, 6))
-    plt.plot(ball_time_history, error_y_cm, color='darkorange',  linestyle='-', linewidth=2, label='Y Position Error')
-    plt.axhline(0.0, color='black', linestyle='--', linewidth=1.5, label='Target State (Dead Center)')
+    # ── Plot 2: X and Y error ─────────────────────────────────────────────
+    ax2.plot(ball_time_history, error_x_cm, color='teal',      linewidth=2, label='X Error')
+    ax2.plot(ball_time_history, error_y_cm, color='darkorange', linewidth=2, label='Y Error')
+    ax2.axhline(0.0, color='black',  linestyle='--', linewidth=1.5, label='Target (0 cm)')
+    ax2.axhline( 1.5, color='green', linestyle='--', linewidth=1.5, label='Convergence Bound (±1.5 cm)')
+    ax2.axhline(-1.5, color='green', linestyle='--', linewidth=1.5)
+    ax2.set_title('X and Y Distance from Center', fontsize=13)
+    ax2.set_xlabel('Time Elapsed (Seconds)', fontsize=12)
+    ax2.set_ylabel('Distance (cm)', fontsize=12)
+    ax2.legend(loc='upper right', frameon=True, shadow=True)
+    ax2.grid(True, linestyle=':', alpha=0.6)
 
-
-    plt.title('Ball Centering Deviation Error over Time', fontsize=14, fontweight='bold')
-    plt.xlabel('Time Elapsed (Seconds)', fontsize=12)
-    plt.ylabel('Deviation Error from Center (cm)', fontsize=12)   # <-- updated label
-    plt.grid(True, linestyle=':', alpha=0.6)
-    plt.legend(loc='upper right', frameon=True, shadow=True)
-
+    plt.tight_layout()
     print("\nDisplaying ball positioning performance graph...")
     plt.show()
 
@@ -317,7 +328,7 @@ def main():
     last_valid_x = 0.0
     last_valid_y = 0.0
     lost_frame_count = 0
-    MAX_LOST_FRAMES_HOLD = 5 # How many frames to trust old data before giving up
+    MAX_LOST_FRAMES_HOLD = 10 # How many frames to trust old data before giving up
             
     # Loop rate control settings (~100Hz loop speed)
     loop_hz = 100.0
