@@ -8,7 +8,7 @@ from ball_velocity_tracker import track_ping_pong_ball
 DXL_IDS          = [3, 2, 1]
 BAUDRATE         = 57600
 PROTOCOL_VERSION = 2.0
-DEVICENAME       = "COM3"
+DEVICENAME       = "/dev/tty.usbserial-FT3FSNI8"
 
 ADDR_OPERATING_MODE   = 11
 ADDR_TORQUE_ENABLE    = 64
@@ -49,13 +49,13 @@ Q_MIN_VERTICAL   = np.array([98.0, 72.0, 82.0])
 NEUTRAL_Z = 80.0  # Safe compact mid-height for your short rods
 
 # ─── PID CONTROLLER TUNING PARAMETERS ──────────────────────────────────────
-K_P_ROLL  = 10.0    # Proportional gain for X -> Roll tilt
+K_P_ROLL  = 8.0    # Proportional gain for X -> Roll tilt
 K_D_ROLL  = 6.0    # Derivative gain (damping) for X speed
-K_I_ROLL  = 1.5    # Integral gain for Roll
+K_I_ROLL  = 3   # Integral gain for Roll
 
-K_P_PITCH = 10.0    # Proportional gain for Y -> Pitch tilt
+K_P_PITCH = 8.0    # Proportional gain for Y -> Pitch tilt
 K_D_PITCH = 6.0    # Derivative gain (damping) for Y speed
-K_I_PITCH = 1.5    # Integral gain for Pitch
+K_I_PITCH = 3    # Integral gain for Pitch
 
 
 MAX_TILT_DEG = 8.0  # Hard soft-stop cap to keep angles gentle and stable
@@ -71,7 +71,7 @@ def _signed_deg_err(current, target):
     err = (target - current + 180) % 360 - 180
     return err
 
-def get_ball_position(camera_index=1):
+def get_ball_position(camera_index=0):
     """
     Masks out the white background by isolating the black circular platform,
     then securely tracks the white ping-pong ball moving inside it.
@@ -261,30 +261,33 @@ def goto_home_via_position_mode(
     print("Homed and ready.")
 
 def plot_ball_error_performance():
-    """Generates a combined performance plot for X and Y tracking errors."""
     if not ball_time_history:
         print("No dynamic data collected during execution. Skipping plots.")
         return
 
+    # Scale: normalized [-1,1] -> pixels (×320) -> mm (×535/640) -> cm (÷10)
+    PX_PER_NORM = 320                  # 1.0 normalized = 320 px (half frame width)
+    MM_PER_PX   = 535.0 / 640.0       # physical calibration
+    CM_PER_NORM = PX_PER_NORM * MM_PER_PX / 10.0   # = 26.75 cm per unit
+
+    error_x_cm = [e * CM_PER_NORM for e in error_x_history]
+    error_y_cm = [e * CM_PER_NORM for e in error_y_history]
+
     plt.figure(figsize=(10, 6))
-    
-    # Plot X and Y error data on the same axes
-    plt.plot(ball_time_history, error_x_history, color='teal', linestyle='-', linewidth=2, label='X Position Error')
-    plt.plot(ball_time_history, error_y_history, color='darkorange', linestyle='-', linewidth=2, label='Y Position Error')
-    
-    # Draw a stark black baseline indicating dead-center (0.0 error target)
+    plt.plot(ball_time_history, error_x_cm, color='teal',       linestyle='-', linewidth=2, label='X Position Error')
     plt.axhline(0.0, color='black', linestyle='--', linewidth=1.5, label='Target State (Dead Center)')
-    
-    # Labeling metrics
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(ball_time_history, error_y_cm, color='darkorange',  linestyle='-', linewidth=2, label='Y Position Error')
+    plt.axhline(0.0, color='black', linestyle='--', linewidth=1.5, label='Target State (Dead Center)')
+
+
     plt.title('Ball Centering Deviation Error over Time', fontsize=14, fontweight='bold')
     plt.xlabel('Time Elapsed (Seconds)', fontsize=12)
-    
-    # Label adjusts depending on your normalization scale (pixels, normalized -1 to 1, or mm)
-    plt.ylabel('Deviation Error from Center Target', fontsize=12)
-    
+    plt.ylabel('Deviation Error from Center (cm)', fontsize=12)   # <-- updated label
     plt.grid(True, linestyle=':', alpha=0.6)
     plt.legend(loc='upper right', frameon=True, shadow=True)
-    
+
     print("\nDisplaying ball positioning performance graph...")
     plt.show()
 
