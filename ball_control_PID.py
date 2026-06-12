@@ -50,13 +50,13 @@ Q_MIN_VERTICAL   = np.array([98.0, 72.0, 82.0])
 NEUTRAL_Z = 80.0  # Safe compact mid-height for your short rods
 
 # ─── PID CONTROLLER TUNING PARAMETERS ──────────────────────────────────────
-K_P_ROLL  = 10    # Proportional gain for X -> Roll tilt
-K_D_ROLL  = 5.0    # Derivative gain (damping) for X speed
-K_I_ROLL  = 3.5    # Integral gain for Roll
+K_P_ROLL  = 8    # Proportional gain for X -> Roll tilt
+K_D_ROLL  = 4    # Derivative gain (damping) for X speed
+K_I_ROLL  = 0    # Integral gain for Roll
 
-K_P_PITCH = 10    # Proportional gain for Y -> Pitch tilt
-K_D_PITCH = 5.0    # Derivative gain (damping) for Y speed
-K_I_PITCH = 3.5    # Integral gain for Pitch
+K_P_PITCH = K_P_ROLL    # Proportional gain for Y -> Pitch tilt
+K_D_PITCH = K_D_ROLL    # Derivative gain (damping) for Y speed
+K_I_PITCH = K_I_ROLL    # Integral gain for Pitch
 
 
 MAX_TILT_DEG = 8.0  # Hard soft-stop cap to keep angles gentle and stable
@@ -275,7 +275,8 @@ def plot_ball_error_performance():
     distance_cm = np.sqrt(error_x_cm**2 + error_y_cm**2)
 
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10), sharex=True)
-    fig.suptitle('Ball Position Error with PID Control (P = 10, I = 3, D = 5)', fontsize=15, fontweight='bold')
+    fig.suptitle(f'Ball Position Error with PID Control '
+    f'(P = {K_P_ROLL}, I = {K_I_ROLL}, D = {K_D_ROLL})', fontsize=15, fontweight='bold')
 
     # ── Plot 1: Linear distance from center ───────────────────────────────
     ax1.plot(ball_time_history, distance_cm, color='mediumpurple', linewidth=2, label='Distance from Center')
@@ -386,8 +387,8 @@ def main():
 
             # Clamp Integral term to prevent windup
             INT_LIMIT = 3.0
-            integral_error_x = np.clip(integral_error_x, -INT_LIMIT / K_I_ROLL, INT_LIMIT / K_I_ROLL)
-            integral_error_y = np.clip(integral_error_y, -INT_LIMIT / K_I_PITCH, INT_LIMIT / K_I_PITCH)
+            #integral_error_x = np.clip(integral_error_x, -INT_LIMIT / K_I_ROLL, INT_LIMIT / K_I_ROLL)
+            #integral_error_y = np.clip(integral_error_y, -INT_LIMIT / K_I_PITCH, INT_LIMIT / K_I_PITCH)
             
             if log_this_frame:
                 ball_time_history.append(t_start - session_start_time)
@@ -396,8 +397,8 @@ def main():
 
             # PID
             # Note: Tweak signs (+/-) depending on camera mounting orientation
-            target_roll  = (K_P_ROLL * error_x) + (K_D_ROLL * d_error_x) + (K_I_ROLL * integral_error_x)
-            target_pitch = (K_P_PITCH * error_y) + (K_D_PITCH * d_error_y) + (K_I_PITCH * integral_error_y)
+            target_roll  = (K_P_ROLL * error_x) + (K_D_ROLL * d_error_x) #+ (K_I_ROLL * integral_error_x)
+            target_pitch = (K_P_PITCH * error_y) + (K_D_PITCH * d_error_y)# + (K_I_PITCH * integral_error_y)
 
             # Clamp output ranges to protect the platform from over-tilting
             target_roll  = np.clip(target_roll, -MAX_TILT_DEG, MAX_TILT_DEG)
