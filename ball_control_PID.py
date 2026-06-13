@@ -1,3 +1,5 @@
+import os
+import csv
 import time
 import numpy as np
 import matplotlib.pyplot as plt
@@ -52,7 +54,7 @@ NEUTRAL_Z = 80.0  # Safe compact mid-height for your short rods
 # ─── PID CONTROLLER TUNING PARAMETERS ──────────────────────────────────────
 K_P_ROLL  = 8    # Proportional gain for X -> Roll tilt
 K_D_ROLL  = 4    # Derivative gain (damping) for X speed
-K_I_ROLL  = 0    # Integral gain for Roll
+K_I_ROLL  = 2    # Integral gain for Roll
 
 K_P_PITCH = K_P_ROLL    # Proportional gain for Y -> Pitch tilt
 K_D_PITCH = K_D_ROLL    # Derivative gain (damping) for Y speed
@@ -60,6 +62,13 @@ K_I_PITCH = K_I_ROLL    # Integral gain for Pitch
 
 
 MAX_TILT_DEG = 8.0  # Hard soft-stop cap to keep angles gentle and stable
+
+# ─── DATA LOGGING / CSV OUTPUT SETTINGS ────────────────────────────────────
+# Change this path to control where the CSV results are saved.
+CSV_OUTPUT_DIR = "/Users/juliachen/Desktop/plotz/variablestarting"
+
+# Will be set at runtime based on user input (e.g. "pingpong" or "golf")
+BALL_TYPE = "ball"
 
 # ─── INTERACTION HELPER FUNCTIONS ──────────────────────────────────────────────────
 def deg_to_pos_ticks(deg):
@@ -71,6 +80,23 @@ def pos_ticks_to_deg(ticks):
 def _signed_deg_err(current, target):
     err = (target - current + 180) % 360 - 180
     return err
+
+def prompt_for_ball_type():
+    """Asks the user (via the command window) what type of ball is being used.
+    This is used later to label the saved CSV file."""
+    global BALL_TYPE
+    while True:
+        response = input("Enter ball type ('ping pong' or 'golf'): ").strip().lower()
+        if response in ("ping pong", "pingpong", "ping-pong", "pp"):
+            BALL_TYPE = "ping_pong"
+            break
+        elif response in ("golf", "golf ball", "golfball"):
+            BALL_TYPE = "golf"
+            break
+        else:
+            print("Invalid entry. Please type 'ping pong' or 'golf'.")
+    print(f"Ball type set to: {BALL_TYPE}")
+
 
 def get_ball_position(camera_index=0):
     """
@@ -261,6 +287,47 @@ def goto_home_via_position_mode(
         time.sleep(0.05)
     print("Homed and ready.")
 
+
+def _build_csv_filename():
+    """Builds a CSV filename that encodes the PID gains and ball type."""
+    filename = (
+        f"P{K_P_ROLL}_I{K_I_ROLL}_D{K_D_ROLL}_{BALL_TYPE}.csv"
+    )
+    return filename
+
+
+def save_data_to_csv():
+    """Saves timestamp and linear distance-from-center data to a CSV file
+    for later plotting/comparison. The file is named using the PID gains
+    and the ball type, and saved to CSV_OUTPUT_DIR."""
+    if not ball_time_history:
+        print("No dynamic data collected during execution. Skipping CSV save.")
+        return
+
+    # Scale: normalized [-1,1] -> pixels (×320) -> mm (×535/640) -> cm (÷10)
+    PX_PER_NORM = 320
+    MM_PER_PX   = 535.0 / 640.0
+    CM_PER_NORM = PX_PER_NORM * MM_PER_PX / 10.0   # = 26.75 cm per unit
+
+    error_x_cm = np.array(error_x_history, dtype=float) * CM_PER_NORM
+    error_y_cm = np.array(error_y_history, dtype=float) * CM_PER_NORM
+    distance_cm = np.sqrt(error_x_cm**2 + error_y_cm**2)
+
+    # Make sure the output directory exists
+    os.makedirs(CSV_OUTPUT_DIR, exist_ok=True)
+
+    filename = _build_csv_filename()
+    filepath = os.path.join(CSV_OUTPUT_DIR, filename)
+
+    with open(filepath, mode="w", newline="") as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(["time_s", "distance_cm", "error_x_cm", "error_y_cm"])
+        for t, d, ex, ey in zip(ball_time_history, distance_cm, error_x_cm, error_y_cm):
+            writer.writerow([f"{t:.6f}", f"{d:.6f}", f"{ex:.6f}", f"{ey:.6f}"])
+
+    print(f"Saved data log to: {filepath}")
+
+
 def plot_ball_error_performance():
     if not ball_time_history:
         print("No dynamic data collected during execution. Skipping plots.")
@@ -306,6 +373,9 @@ def plot_ball_error_performance():
 
 # ─── MAIN BALANCING EXECUTION LOOP ────────────────────────────────────────
 def main():
+    # Collect ball type from the user up front (used in the CSV filename)
+    prompt_for_ball_type()
+
     # Setup standard communication connection
     portHandler = PortHandler(DEVICENAME)
     packetHandler = PacketHandler(PROTOCOL_VERSION)
@@ -387,8 +457,8 @@ def main():
 
             # Clamp Integral term to prevent windup
             INT_LIMIT = 3.0
-            #integral_error_x = np.clip(integral_error_x, -INT_LIMIT / K_I_ROLL, INT_LIMIT / K_I_ROLL)
-            #integral_error_y = np.clip(integral_error_y, -INT_LIMIT / K_I_PITCH, INT_LIMIT / K_I_PITCH)
+            integral_error_x = np.clip(integral_error_x, -INT_LIMIT / K_I_ROLL, INT_LIMIT / K_I_ROLL)
+            integral_error_y = np.clip(integral_error_y, -INT_LIMIT / K_I_PITCH, INT_LIMIT / K_I_PITCH)
             
             if log_this_frame:
                 ball_time_history.append(t_start - session_start_time)
@@ -397,8 +467,8 @@ def main():
 
             # PID
             # Note: Tweak signs (+/-) depending on camera mounting orientation
-            target_roll  = (K_P_ROLL * error_x) + (K_D_ROLL * d_error_x) #+ (K_I_ROLL * integral_error_x)
-            target_pitch = (K_P_PITCH * error_y) + (K_D_PITCH * d_error_y)# + (K_I_PITCH * integral_error_y)
+            target_roll  = (K_P_ROLL * error_x) + (K_D_ROLL * d_error_x) + (K_I_ROLL * integral_error_x)
+            target_pitch = (K_P_PITCH * error_y) + (K_D_PITCH * d_error_y) + (K_I_PITCH * integral_error_y)
 
             # Clamp output ranges to protect the platform from over-tilting
             target_roll  = np.clip(target_roll, -MAX_TILT_DEG, MAX_TILT_DEG)
@@ -444,6 +514,7 @@ def main():
         portHandler.closePort()
         print("System shutdown clear.")
         
+        save_data_to_csv()
         plot_ball_error_performance()
 
 if __name__ == "__main__":
