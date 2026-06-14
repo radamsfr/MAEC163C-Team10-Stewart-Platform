@@ -422,7 +422,7 @@ def main():
             if dt <= 0.0:
                 dt = 0.001 # Prevent divide-by-zero errors
 
-            ball_x, ball_y = get_ball_position()
+            ball_x, ball_y = get_ball_position(camera_index=0)  # select index of USB camera feed (usually 0 for mac, 1 for windows)
             ball_x = -ball_x  # Invert X if camera is mounted flipped
             # ball_y = -ball_y  # Invert Y if camera is mounted flipped
             
